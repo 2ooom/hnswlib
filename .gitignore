@@ -3,3 +3,6 @@
 .idea
 # macOS
 .DS_Store
+
+benchmark
+build
