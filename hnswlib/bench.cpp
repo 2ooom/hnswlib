@@ -11,8 +11,9 @@ class L2BaseBench : public benchmark::Fixture {
     public:
     size_t dimension;
     size_t nb_embeddings = 100;
+    bool baseline;
 
-    hnswlib::L2Space* space;
+    hnswlib::SpaceInterface<float>* space;
     void* dist_func_param;
     hnswlib::DISTFUNC<float> dist_func;
     std::vector<std::vector<float>> scenario_input;
@@ -31,7 +32,7 @@ class L2BaseBench : public benchmark::Fixture {
             }
             scenario_input.push_back(vector);
         }
-        space = new hnswlib::L2Space(dimension);
+        space = new hnswlib::L2Space(dimension, baseline);
         dist_func_param = space->get_dist_func_param();
         dist_func = space->get_dist_func();
 
@@ -63,28 +64,40 @@ class L2BaseBench : public benchmark::Fixture {
     class Dim##dim : public L2BaseBench {\
         public: Dim##dim() {\
             dimension = dim;\
+            baseline = false;\
         }\
     };\
     BENCHMARK_DEFINE_F(Dim##dim, Dist)(benchmark::State& st) { for (auto _ : st) compute_distance(); }\
-    BENCHMARK_REGISTER_F(Dim##dim, Dist);
-
+    BENCHMARK_REGISTER_F(Dim##dim, Dist);\
+    \
+    class BaselineDim##dim : public L2BaseBench {\
+        public: BaselineDim##dim() {\
+            dimension = dim;\
+            baseline = true;\
+        }\
+    };\
+    BENCHMARK_DEFINE_F(BaselineDim##dim, Dist)(benchmark::State& st) { for (auto _ : st) compute_distance(); }\
+    BENCHMARK_REGISTER_F(BaselineDim##dim, Dist);
+/*
 L2DimBench(3);
 L2DimBench(4);
-L2DimBench(7);
+L2DimBench(7);*/
 L2DimBench(8);
-L2DimBench(9);
-L2DimBench(15);
 L2DimBench(16);
+L2DimBench(24);
+L2DimBench(32);
+L2DimBench(40);
+L2DimBench(48);
+L2DimBench(56);
+L2DimBench(64);
 L2DimBench(100);
-L2DimBench(101);
 L2DimBench(128);
-L2DimBench(129);
-
+/*
 BENCHMARK_DEFINE_F(Dim3, Prep)(benchmark::State& st) {
     for (auto _ : st) {
         get_vector();
         get_vector();
     }
-}
+}*/
 
 BENCHMARK_MAIN();

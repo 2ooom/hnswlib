@@ -23,6 +23,32 @@ namespace hnswlib {
 
     // Favor using AVX if available.
     static float
+    L2SqrSIMD8Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        float *pVect1 = (float *) pVect1v;
+        float *pVect2 = (float *) pVect2v;
+        size_t qty = *((size_t *) qty_ptr);
+        float PORTABLE_ALIGN32 TmpRes[8];
+        size_t qty8 = qty >> 3;
+
+        const float *pEnd1 = pVect1 + (qty8 << 3);
+
+        __m256 diff, v1, v2;
+        __m256 sum = _mm256_set1_ps(0);
+
+        while (pVect1 < pEnd1) {
+            v1 = _mm256_loadu_ps(pVect1);
+            pVect1 += 8;
+            v2 = _mm256_loadu_ps(pVect2);
+            pVect2 += 8;
+            diff = _mm256_sub_ps(v1, v2);
+            sum = _mm256_add_ps(sum, _mm256_mul_ps(diff, diff));
+        }
+
+        _mm256_store_ps(TmpRes, sum);
+        return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] + TmpRes[7];
+    }
+
+    static float
     L2SqrSIMD16Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
         float *pVect1 = (float *) pVect1v;
         float *pVect2 = (float *) pVect2v;
@@ -54,8 +80,41 @@ namespace hnswlib {
         _mm256_store_ps(TmpRes, sum);
         return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] + TmpRes[7];
     }
-
 #elif defined(USE_SSE)
+
+    static float
+    L2SqrSIMD8Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        float *pVect1 = (float *) pVect1v;
+        float *pVect2 = (float *) pVect2v;
+        size_t qty = *((size_t *) qty_ptr);
+        float PORTABLE_ALIGN32 TmpRes[8];
+        size_t qty8 = qty >> 3;
+
+        const float *pEnd1 = pVect1 + (qty8 << 3);
+
+        __m128 diff, v1, v2;
+        __m128 sum = _mm_set1_ps(0);
+
+        while (pVect1 < pEnd1) {
+            //_mm_prefetch((char*)(pVect2 + 16), _MM_HINT_T0);
+            v1 = _mm_loadu_ps(pVect1);
+            pVect1 += 4;
+            v2 = _mm_loadu_ps(pVect2);
+            pVect2 += 4;
+            diff = _mm_sub_ps(v1, v2);
+            sum = _mm_add_ps(sum, _mm_mul_ps(diff, diff));
+
+            v1 = _mm_loadu_ps(pVect1);
+            pVect1 += 4;
+            v2 = _mm_loadu_ps(pVect2);
+            pVect2 += 4;
+            diff = _mm_sub_ps(v1, v2);
+            sum = _mm_add_ps(sum, _mm_mul_ps(diff, diff));
+        }
+
+        _mm_store_ps(TmpRes, sum);
+        return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
+    }
 
     static float
     L2SqrSIMD16Ext(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
@@ -107,6 +166,19 @@ namespace hnswlib {
 #endif
 
 #if defined(USE_SSE) || defined(USE_AVX)
+    static float
+    L2SqrSIMD8ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        size_t qty = *((size_t *) qty_ptr);
+        size_t qty8 = qty >> 3 << 3;
+        float res = L2SqrSIMD8Ext(pVect1v, pVect2v, &qty8);
+        float *pVect1 = (float *) pVect1v + qty8;
+        float *pVect2 = (float *) pVect2v + qty8;
+
+        size_t qty_left = qty - qty8;
+        float res_tail = L2Sqr(pVect1, pVect2, &qty_left);
+        return (res + res_tail);
+    }
+
     static float
     L2SqrSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
         size_t qty = *((size_t *) qty_ptr);
@@ -172,17 +244,28 @@ namespace hnswlib {
         size_t data_size_;
         size_t dim_;
     public:
-        L2Space(size_t dim) {
+        L2Space(size_t dim, bool baseline = true) {
             fstdistfunc_ = L2Sqr;
         #if defined(USE_SSE) || defined(USE_AVX)
-            if (dim % 16 == 0)
-                fstdistfunc_ = L2SqrSIMD16Ext;
-            else if (dim % 4 == 0)
-                fstdistfunc_ = L2SqrSIMD4Ext;
-            else if (dim > 16)
-                fstdistfunc_ = L2SqrSIMD16ExtResiduals;
-            else if (dim > 4)
-                fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+            if (baseline) {
+                if (dim % 16 == 0)
+                    fstdistfunc_ = L2SqrSIMD16Ext;
+                else if (dim % 4 == 0)
+                    fstdistfunc_ = L2SqrSIMD4Ext;
+                else if (dim > 8)
+                    fstdistfunc_ = L2SqrSIMD16ExtResiduals;
+                else if (dim > 4)
+                    fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+            } else {
+                if (dim % 8 == 0)
+                    fstdistfunc_ = L2SqrSIMD8Ext;
+                else if (dim % 4 == 0)
+                    fstdistfunc_ = L2SqrSIMD4Ext;
+                else if (dim > 8)
+                    fstdistfunc_ = L2SqrSIMD8ExtResiduals;
+                else if (dim > 4)
+                    fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+            }
         #endif
             dim_ = dim;
             data_size_ = dim * sizeof(float);
