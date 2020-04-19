@@ -211,20 +211,61 @@ namespace hnswlib {
 
 #endif
 
+#if defined(USE_SSE) || defined(USE_AVX)
+    static float
+    InnerProductSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        size_t qty = *((size_t *) qty_ptr);
+        size_t qty16 = qty >> 4 << 4;
+        float res = InnerProductSIMD16Ext(pVect1v, pVect2v, &qty16);
+        float *pVect1 = (float *) pVect1v + qty16;
+        float *pVect2 = (float *) pVect2v + qty16;
+
+        size_t qty_left = qty - qty16;
+        float res_tail = InnerProduct(pVect1, pVect2, &qty_left);
+        return res + res_tail - 1.0f;
+    }
+
+    static float
+    InnerProductSIMD4ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        size_t qty = *((size_t *) qty_ptr);
+        size_t qty4 = qty >> 2 << 2;
+
+        float res = InnerProductSIMD4Ext(pVect1v, pVect2v, &qty4);
+        size_t qty_left = qty - qty4;
+
+        float *pVect1 = (float *) pVect1v + qty4;
+        float *pVect2 = (float *) pVect2v + qty4;
+        float res_tail = InnerProduct(pVect1, pVect2, &qty_left);
+
+        return res + res_tail - 1.0f;
+    }
+#endif
+
     class InnerProductSpace : public SpaceInterface<float> {
 
         DISTFUNC<float> fstdistfunc_;
         size_t data_size_;
         size_t dim_;
     public:
-        InnerProductSpace(size_t dim) {
+        InnerProductSpace(size_t dim, bool baseline = true) {
             fstdistfunc_ = InnerProduct;
     #if defined(USE_AVX) || defined(USE_SSE)
-            if (dim % 4 == 0)
-                fstdistfunc_ = InnerProductSIMD4Ext;
-            if (dim % 16 == 0)
-                fstdistfunc_ = InnerProductSIMD16Ext;
-#endif
+            if (baseline) {
+                if (dim % 4 == 0)
+                    fstdistfunc_ = InnerProductSIMD4Ext;
+                if (dim % 16 == 0)
+                    fstdistfunc_ = InnerProductSIMD16Ext;
+            } else {
+                if (dim % 16 == 0)
+                    fstdistfunc_ = InnerProductSIMD16Ext;
+                else if (dim % 4 == 0)
+                    fstdistfunc_ = InnerProductSIMD4Ext;
+                else if (dim > 16)
+                    fstdistfunc_ = InnerProductSIMD16ExtResiduals;
+                else if (dim > 4)
+                    fstdistfunc_ = InnerProductSIMD4ExtResiduals;
+            }
+    #endif
             dim_ = dim;
             data_size_ = dim * sizeof(float);
         }
