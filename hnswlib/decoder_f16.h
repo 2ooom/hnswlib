@@ -3,6 +3,12 @@
 
 namespace hnswlib {
 
+    template<typename src_type, typename dst_type, dst_type(*func)(src_type)>
+    static void inline
+    encode_decode(const src_type* src, dst_type* dst, const size_t qty) {
+        std::transform(src, src + qty, dst, func);
+    }
+
     static void
     encode_vector_float16(const float* src, uint16_t* dst, const size_t qty) {
         for (size_t i = 0; i < qty; i++) {
@@ -71,6 +77,20 @@ namespace hnswlib {
         const auto qty_left = qty - qty8;
         decode_float16_vector(src + qty8, dst + qty8, qty_left);
     }
+
+    static void
+    encode_vector_float16_SIMD8Residuals_new(const float* src, uint16_t* dst, const size_t qty) {
+        const auto qty8 = qty >> 3 << 3;
+        encode_vector_float16_SIMD8(src, dst, qty8);
+        std::transform(src + qty8, src + qty, dst + qty8, encode_fp16);
+    }
+
+    static void
+    decode_float16_vector_SIMD8Residuals_new(const uint16_t* src, float* dst, const size_t qty) {
+        const auto qty8 = qty >> 3 << 3;
+        decode_float16_vector_SIMD8(src, dst, qty8);
+        std::transform(src + qty8, src + qty, dst + qty8, decode_fp16);
+    }
 #endif
 #if defined(USE_SSE)
 
@@ -119,32 +139,46 @@ namespace hnswlib {
         const auto qty_left = qty - qty4;
         decode_float16_vector(src + qty4, dst + qty4, qty_left);
     }
+
+    static void
+    encode_vector_float16_SIMD4Residuals_new(const float* src, uint16_t* dst, const size_t qty) {
+        const auto qty4 = qty >> 2 << 2;
+        encode_vector_float16_SIMD4(src, dst, qty4);
+        std::transform(src + qty4, src + qty, dst + qty4, encode_fp16);
+    }
+
+    static void
+    decode_float16_vector_SIMD4Residuals_new(const uint16_t* src, float* dst, const size_t qty) {
+        const auto qty4 = qty >> 2 << 2;
+        decode_float16_vector_SIMD4(src, dst, qty4);
+        std::transform(src + qty4, src + qty, dst + qty4, decode_fp16);
+    }
 #endif
 
     static
     DECODEFUNC<float, uint16_t> get_fast_float16_encode_func(size_t dim, bool baseline = true) {
-        auto func = encode_vector_float16;
+        auto func = baseline? encode_vector_float16 : encode_decode<float, uint16_t, encode_fp16>;
     #if defined(USE_SSE)
         if (dim % 4 == 0) func = encode_vector_float16_SIMD4;
-        else if (dim > 4) func = encode_vector_float16_SIMD4Residuals;
+        else if (dim > 4) func = baseline?  encode_vector_float16_SIMD4Residuals : encode_vector_float16_SIMD4Residuals_new;
     #endif
     #if defined(USE_AVX)
         if (dim % 8 == 0) func = encode_vector_float16_SIMD8;
-        else if (dim > 8) func = encode_vector_float16_SIMD8Residuals;
+        else if (dim > 8) func = baseline? encode_vector_float16_SIMD8Residuals : encode_vector_float16_SIMD8Residuals_new;
     #endif
         return func;
     }
 
     static
     DECODEFUNC<uint16_t, float> get_fast_float16_decode_func(size_t dim, bool baseline = true) {
-        auto func = decode_float16_vector;
+        auto func = baseline? decode_float16_vector : encode_decode<uint16_t, float, decode_fp16>;
     #if defined(USE_SSE)
         if (dim % 4 == 0) func = decode_float16_vector_SIMD4;
-        else if (dim > 4) func = decode_float16_vector_SIMD4Residuals;
+        else if (dim > 4) func = baseline?  decode_float16_vector_SIMD4Residuals : decode_float16_vector_SIMD4Residuals_new;
     #endif
     #if defined(USE_AVX)
         if (dim % 8 == 0) func = decode_float16_vector_SIMD8;
-        else if (dim > 8) func = decode_float16_vector_SIMD8Residuals;
+        else if (dim > 8) func = baseline?  decode_float16_vector_SIMD8Residuals : decode_float16_vector_SIMD8Residuals_new;
     #endif
         return func;
     }

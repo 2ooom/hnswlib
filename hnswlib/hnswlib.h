@@ -30,6 +30,7 @@
 #include <queue>
 #include <vector>
 
+#include <algorithm>
 #include <string.h>
 
 namespace hnswlib {
