@@ -52,6 +52,8 @@ namespace hnswlib {
     template<typename MTYPE>
     using DISTFUNC = MTYPE(*)(const void *, const void *, const void *);
 
+    template<typename SRC, typename DST>
+    using DECODEFUNC = void(*)(const SRC *, DST *, const size_t);
 
     template<typename MTYPE>
     class SpaceInterface {
@@ -82,6 +84,10 @@ namespace hnswlib {
 
 }
 
+
+#include "float16.h"
+#include "space_l2_f16.h"
+#include "space_ip_f16.h"
 #include "space_l2.h"
 #include "space_ip.h"
 #include "bruteforce.h"
