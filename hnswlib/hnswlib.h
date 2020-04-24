@@ -8,6 +8,10 @@
 #endif
 #endif
 
+#ifdef __F16C__
+#define USE_F16C
+#endif
+
 #if defined(USE_AVX) || defined(USE_SSE)
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -52,6 +56,8 @@ namespace hnswlib {
     template<typename MTYPE>
     using DISTFUNC = MTYPE(*)(const void *, const void *, const void *);
 
+    template<typename SRC, typename DST>
+    using DECODEFUNC = void(*)(const SRC *, DST *, const size_t);
 
     template<typename MTYPE>
     class SpaceInterface {
@@ -82,6 +88,11 @@ namespace hnswlib {
 
 }
 
+
+#include "float16.h"
+#include "decoder_f16.h"
+#include "space_l2_f16.h"
+#include "space_ip_f16.h"
 #include "space_l2.h"
 #include "space_ip.h"
 #include "bruteforce.h"
