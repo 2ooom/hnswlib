@@ -212,12 +212,15 @@ namespace hnswlib {
 #ifdef USE_SSE
     static float
     L2SqrSIMD4Ext_new(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
-        auto pVect1 = static_cast<const float*>(pVect1v);
-        auto pVect2 = static_cast<const float*>(pVect2v);
-        const auto qty = *static_cast<const size_t*>(qty_ptr);
+         float PORTABLE_ALIGN32 TmpRes[8];
+        float *pVect1 = (float *) pVect1v;
+        float *pVect2 = (float *) pVect2v;
+        size_t qty = *((size_t *) qty_ptr);
 
-        const auto qty4 = qty >> 2;
-        const auto pEnd1 = pVect1 + (qty4 << 2);
+
+        size_t qty4 = qty >> 2;
+
+        const float *pEnd1 = pVect1 + (qty4 << 2);
 
         __m128 diff, v1, v2;
         __m128 sum = _mm_set1_ps(0);
@@ -230,7 +233,6 @@ namespace hnswlib {
             diff = _mm_sub_ps(v1, v2);
             sum = _mm_add_ps(sum, _mm_mul_ps(diff, diff));
         }
-        float PORTABLE_ALIGN32 TmpRes[4];
         _mm_store_ps(TmpRes, sum);
         return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
     }
@@ -239,7 +241,7 @@ namespace hnswlib {
     L2SqrSIMD4ExtResiduals_new(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
         const auto qty = *static_cast<const size_t*>(qty_ptr);
         const auto qty4 = qty >> 2 << 2;
-        const auto res = L2SqrSIMD4Ext(pVect1v, pVect2v, &qty4);
+        const auto res = L2SqrSIMD4Ext_new(pVect1v, pVect2v, &qty4);
         const auto qty_left = qty - qty4;
         const auto pVect1 = static_cast<const float*>(pVect1v) + qty4;
         const auto pVect2 = static_cast<const float*>(pVect2v) + qty4;
@@ -257,46 +259,46 @@ namespace hnswlib {
     public:
         L2Space(size_t dim, bool baseline = true) {
             fstdistfunc_ = L2Sqr;
-            //std::cout<<dim << " dim\n";
+            std::cout<<dim << " dim\n";
         #if defined(USE_SSE) || defined(USE_AVX)
             if (baseline) {
-            //std::cout<<"baseline\n";
+            std::cout<<"baseline\n";
             if (dim % 16 == 0) {
-                //std::cout<<"L2SqrSIMD16Ext\n";
+                std::cout<<"L2SqrSIMD16Ext\n";
                 fstdistfunc_ = L2SqrSIMD16Ext;
             }
             else if (dim % 4 == 0) {
-                //std::cout<<"L2SqrSIMD4Ext\n";
+                std::cout<<"L2SqrSIMD4Ext\n";
                 fstdistfunc_ = L2SqrSIMD4Ext;
             }
             else if (dim > 16) {
-                //std::cout<<"L2SqrSIMD16ExtResiduals\n";
+                std::cout<<"L2SqrSIMD16ExtResiduals\n";
                 fstdistfunc_ = L2SqrSIMD16ExtResiduals;
             }
             else if (dim > 4) {
-                //std::cout<<"L2SqrSIMD4ExtResiduals\n";
+                std::cout<<"L2SqrSIMD4ExtResiduals\n";
                 fstdistfunc_ = L2SqrSIMD4ExtResiduals;
             }
         #endif
             } else {
-                //std::cout<<"test\n";
+                std::cout<<"test\n";
             #if defined(USE_SSE)
                 if (dim % 4 == 0) {
-                    //std::cout<<"L2SqrSIMD4Ext_new\n";
+                    std::cout<<"L2SqrSIMD4Ext_new\n";
                     fstdistfunc_ = L2SqrSIMD4Ext_new;
                 }
                 else if (dim > 4) {
-                    //std::cout<<"L2SqrSIMD4Ext_new\n";
+                    std::cout<<"L2SqrSIMD4Ext_new\n";
                     fstdistfunc_ = L2SqrSIMD4ExtResiduals_new;
                 }
             #endif
             #if defined(USE_AVX)
-                if (dim % 8 == 0) {
-                    //std::cout<<"L2SqrSIMD8Ext\n";
+                if (dim % 8 == 0 && dim > 16) {
+                    std::cout<<"L2SqrSIMD8Ext\n";
                     fstdistfunc_ = L2SqrSIMD8Ext;
                 }
-                else if (dim > 8) {
-                    //std::cout<<"L2SqrSIMD8ExtResiduals\n";
+                else if (dim > 16) {
+                    std::cout<<"L2SqrSIMD8ExtResiduals\n";
                     fstdistfunc_ = L2SqrSIMD8ExtResiduals;
                 }
             #endif

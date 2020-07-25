@@ -33,7 +33,13 @@ class BaseDistBench : public benchmark::Fixture {
             scenario_input.push_back(vector);
         }
         space = new hnswlib::L2Space(dimension, baseline);
-        dist_func_param = space->get_dist_func_param();
+        dist_func_param = &dimension;//space->get_dist_func_param();
+        /*if(baseline) {
+            dist_func = hnswlib::L2SqrSIMD4Ext;
+        } else {
+            dist_func = hnswlib::L2SqrSIMD8Ext;
+        }
+        */
         dist_func = space->get_dist_func();
 
         scenario_input_size = scenario_input.size();
@@ -81,6 +87,9 @@ class BaseDistBench : public benchmark::Fixture {
 
 
 L2Bench(4);
+L2Bench(8);
+L2Bench(24);
+/*
 L2Bench(5);
 L2Bench(6);
 L2Bench(7);
@@ -122,7 +131,7 @@ L2Bench(300);
 L2Bench(400);
 L2Bench(512);
 L2Bench(1024);
-
+*/
 /*
 BENCHMARK_DEFINE_F(Dim3, Prep)(benchmark::State& st) {
     for (auto _ : st) {
